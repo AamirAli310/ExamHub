@@ -1,0 +1,6 @@
+{
+  "name": "CAT4 & GL Assessment Real-Exam Simulator",
+  "description": "Interactive, timed exam simulator for CAT4 (Verbal, Non-Verbal, Quantitative, Spatial), GL Assessment, Science, and Math tests with customizable exam policies, uploadable question banks, and in-depth Stanine/SAS analytics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
