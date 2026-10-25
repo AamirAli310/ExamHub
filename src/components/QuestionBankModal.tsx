@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Question, BatteryType, OptionLabel, ExamCategory } from '../types/exam';
-import { DEFAULT_QUESTIONS } from '../data/defaultQuestions';
+import { Question, BatteryType, OptionLabel, ExamCategory, ComplexityLevel } from '../types/exam';
+import { generateFull168QuestionBank } from '../data/questionGenerator';
 import { SUBTESTS_META } from '../data/defaultPolicies';
 import {
   X,
@@ -32,6 +32,8 @@ export const QuestionBankModal: React.FC<QuestionBankModalProps> = ({
 }) => {
   const [filterBattery, setFilterBattery] = useState<string>('all');
   const [filterExamType, setFilterExamType] = useState<string>('all');
+  const [filterSubtest, setFilterSubtest] = useState<string>('all');
+  const [filterComplexity, setFilterComplexity] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [uploadFeedback, setUploadFeedback] = useState<string | null>(null);
@@ -40,6 +42,7 @@ export const QuestionBankModal: React.FC<QuestionBankModalProps> = ({
   const [newBattery, setNewBattery] = useState<BatteryType>('Non-Verbal');
   const [newSubtestId, setNewSubtestId] = useState<number>(1);
   const [newExamType, setNewExamType] = useState<ExamCategory>('CAT4');
+  const [newComplexity, setNewComplexity] = useState<ComplexityLevel>('Standard');
   const [newStem, setNewStem] = useState('');
   const [newSvgOrImg, setNewSvgOrImg] = useState('');
   const [optA, setOptA] = useState('');
@@ -58,6 +61,9 @@ export const QuestionBankModal: React.FC<QuestionBankModalProps> = ({
 
   const filteredQuestions = questions.filter((q) => {
     const matchesBattery = filterBattery === 'all' || q.battery === filterBattery;
+    const matchesSubtest = filterSubtest === 'all' || q.subtestId === parseInt(filterSubtest, 10);
+    const matchesComplexity =
+      filterComplexity === 'all' || (q.complexityLevel || 'Standard') === filterComplexity;
     const matchesExamType =
       filterExamType === 'all' ||
       (filterExamType === 'uploaded' && q.isCustomUploaded) ||
@@ -69,7 +75,7 @@ export const QuestionBankModal: React.FC<QuestionBankModalProps> = ({
       q.subtestName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       q.explanation.toLowerCase().includes(searchQuery.toLowerCase());
 
-    return matchesBattery && matchesExamType && matchesSearch;
+    return matchesBattery && matchesSubtest && matchesComplexity && matchesExamType && matchesSearch;
   });
 
   const handleDeleteQuestion = (id: string) => {
@@ -80,9 +86,10 @@ export const QuestionBankModal: React.FC<QuestionBankModalProps> = ({
   };
 
   const handleResetDefault = () => {
-    if (confirm(`Reset question bank back to default comprehensive questions?`)) {
-      onUpdateQuestions(DEFAULT_QUESTIONS);
-      setUploadFeedback('Question bank successfully reset to default questions.');
+    if (confirm(`Reset question bank back to the full 840-question stratified bank (100 per CAT4 subtest across 4 complexity levels + 40 Science/Math)?`)) {
+      const freshBank = generateFull168QuestionBank();
+      onUpdateQuestions(freshBank);
+      setUploadFeedback(`Question bank successfully reset to ${freshBank.length} unique stratified items (25 per complexity level across all 8 CAT4 subtests + Science/Math).`);
     }
   };
 
@@ -196,6 +203,7 @@ export const QuestionBankModal: React.FC<QuestionBankModalProps> = ({
       subtestId: newSubtestId,
       battery: newBattery,
       examType: newExamType,
+      complexityLevel: newComplexity,
       subtestName: subMeta ? subMeta.name : 'Custom Practice',
       stem: newStem,
       diagramSvg: newSvgOrImg.trim() ? newSvgOrImg : undefined,
@@ -280,7 +288,10 @@ export const QuestionBankModal: React.FC<QuestionBankModalProps> = ({
 
             <select
               value={filterBattery}
-              onChange={(e) => setFilterBattery(e.target.value)}
+              onChange={(e) => {
+                setFilterBattery(e.target.value);
+                setFilterSubtest('all');
+              }}
               className="py-2 px-3 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-700"
             >
               <option value="all">All Batteries</option>
@@ -289,6 +300,34 @@ export const QuestionBankModal: React.FC<QuestionBankModalProps> = ({
               <option value="Quantitative">Quantitative</option>
               <option value="Spatial">Spatial</option>
               <option value="Science & Math">Science & Math</option>
+            </select>
+
+            <select
+              value={filterSubtest}
+              onChange={(e) => setFilterSubtest(e.target.value)}
+              className="py-2 px-3 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 max-w-[200px]"
+            >
+              <option value="all">All Subtests ({questions.length})</option>
+              {SUBTESTS_META.map((s) => {
+                const count = questions.filter((q) => q.subtestId === s.id).length;
+                return (
+                  <option key={s.id} value={s.id}>
+                    Subtest {s.id}: {s.name} ({count})
+                  </option>
+                );
+              })}
+            </select>
+
+            <select
+              value={filterComplexity}
+              onChange={(e) => setFilterComplexity(e.target.value)}
+              className="py-2 px-3 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-700"
+            >
+              <option value="all">All Complexity Levels</option>
+              <option value="Beginner">Beginner (Foundation)</option>
+              <option value="Standard">Standard (Core Benchmark)</option>
+              <option value="Advanced">Advanced (Higher-Order)</option>
+              <option value="Expert">Expert (Mastery / Olympiad)</option>
             </select>
           </div>
 
@@ -388,7 +427,7 @@ export const QuestionBankModal: React.FC<QuestionBankModalProps> = ({
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Exam Type</label>
                   <select
@@ -430,6 +469,20 @@ export const QuestionBankModal: React.FC<QuestionBankModalProps> = ({
                         Subtest {s.id}: {s.name}
                       </option>
                     ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Complexity Level</label>
+                  <select
+                    value={newComplexity}
+                    onChange={(e) => setNewComplexity(e.target.value as ComplexityLevel)}
+                    className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-bold"
+                  >
+                    <option value="Beginner">Beginner (Foundation)</option>
+                    <option value="Standard">Standard (Core)</option>
+                    <option value="Advanced">Advanced (Higher-Order)</option>
+                    <option value="Expert">Expert (Mastery)</option>
                   </select>
                 </div>
               </div>
@@ -593,7 +646,7 @@ export const QuestionBankModal: React.FC<QuestionBankModalProps> = ({
                 >
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center flex-wrap gap-2">
                         <span className="font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] uppercase">
                           #{idx + 1} &bull; Subtest {q.subtestId}: {q.subtestName}
                         </span>
@@ -603,6 +656,21 @@ export const QuestionBankModal: React.FC<QuestionBankModalProps> = ({
                         <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-bold">
                           {q.examType || 'CAT4'}
                         </span>
+                        {q.complexityLevel && (
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                              q.complexityLevel === 'Beginner'
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                : q.complexityLevel === 'Standard'
+                                  ? 'bg-sky-50 text-sky-700 border-sky-200'
+                                  : q.complexityLevel === 'Advanced'
+                                    ? 'bg-amber-50 text-amber-800 border-amber-200'
+                                    : 'bg-rose-50 text-rose-700 border-rose-200'
+                            }`}
+                          >
+                            {q.complexityLevel} Tier
+                          </span>
+                        )}
                         {q.isCustomUploaded && (
                           <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-bold text-[10px]">
                             Uploaded

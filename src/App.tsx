@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Question, ExamPolicy, UserProfile, TestAttempt } from './types/exam';
-import { generateFull168QuestionBank } from './data/questionGenerator';
+import { Question, ExamPolicy, UserProfile, TestAttempt, ComplexityLevel } from './types/exam';
+import {
+  generateFull168QuestionBank,
+  sampleUniqueExamQuestions,
+  sampleUniqueQuestionsForSubtests,
+} from './data/questionGenerator';
 import { DEFAULT_POLICIES } from './data/defaultPolicies';
 import { Header } from './components/Header';
 import { Dashboard } from './components/Dashboard';
@@ -12,6 +16,7 @@ import { UserProfileModal } from './components/UserProfileModal';
 import { PerformanceDashboardModal } from './components/PerformanceDashboardModal';
 import { CustomTestCreatorModal } from './components/CustomTestCreatorModal';
 import { FlashcardModal } from './components/FlashcardModal';
+import { ComplexityLevelModal } from './components/ComplexityLevelModal';
 import { calculateDetailedResults, DetailedResults } from './utils/examEngine';
 
 const INITIAL_USERS: UserProfile[] = [
@@ -34,18 +39,18 @@ const INITIAL_USERS: UserProfile[] = [
 ];
 
 export default function App() {
-  // 1. Persistent Question Bank (Full 168+ official questions)
+  // 1. Persistent Question Bank (Full 840 items: 100 per CAT4 subsection across 4 complexity levels + 40 science/math)
   const [questions, setQuestions] = useState<Question[]>(() => {
     try {
-      const saved = localStorage.getItem('cat4_question_bank_v3');
+      const saved = localStorage.getItem('cat4_question_bank_v840_stratified');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length >= 40) {
+        if (Array.isArray(parsed) && parsed.length >= 840) {
           return parsed;
         }
       }
     } catch (e) {
-      console.warn('Failed to load saved question bank, generating full 168 bank', e);
+      console.warn('Failed to load saved question bank, generating full bank', e);
     }
     return generateFull168QuestionBank();
   });
@@ -119,6 +124,10 @@ export default function App() {
   const [activeExamQuestions, setActiveExamQuestions] = useState<Question[]>([]);
   const [activeExamTitle, setActiveExamTitle] = useState('CAT4 Assessment Simulation');
   const [lastSelectedSubtests, setLastSelectedSubtests] = useState<number[] | undefined>(undefined);
+  const [lastComplexityLevel, setLastComplexityLevel] = useState<ComplexityLevel | 'Mixed'>('Mixed');
+  const [lastSubtestOverrides, setLastSubtestOverrides] = useState<
+    Record<number, ComplexityLevel | 'Inherit'> | undefined
+  >(undefined);
   const [resultsData, setResultsData] = useState<DetailedResults | null>(null);
 
   // Modals
@@ -128,11 +137,12 @@ export default function App() {
   const [isPerformanceModalOpen, setIsPerformanceModalOpen] = useState(false);
   const [isCustomTestModalOpen, setIsCustomTestModalOpen] = useState(false);
   const [isFlashcardModalOpen, setIsFlashcardModalOpen] = useState(false);
+  const [isComplexityModalOpen, setIsComplexityModalOpen] = useState(false);
 
   // Sync to local storage
   useEffect(() => {
     try {
-      localStorage.setItem('cat4_question_bank_v3', JSON.stringify(questions));
+      localStorage.setItem('cat4_question_bank_v840_stratified', JSON.stringify(questions));
     } catch (e) {
       // Storage quota fallback
     }
@@ -162,31 +172,40 @@ export default function App() {
     }
   }, [attempts]);
 
-  // Launch Full 168-Question Official GL Assessment Exam
-  const handleStartFull168Exam = () => {
-    // Select questions from all 8 subtests with official counts
-    const selected: Question[] = [];
-    const counts: Record<number, number> = {
-      1: 24,
-      2: 24,
-      3: 24,
-      4: 24,
-      5: 18,
-      6: 18,
-      7: 18,
-      8: 18,
-    };
+  // Launch Full 168-Question Official GL Assessment Exam with Complexity Stratification
+  const handleStartFull168Exam = (
+    complexityLevel: ComplexityLevel | 'Mixed' = 'Mixed',
+    subtestOverrides?: Record<number, ComplexityLevel | 'Inherit'>,
+    linkingModeSummary?: string
+  ) => {
+    setLastComplexityLevel(complexityLevel);
+    setLastSubtestOverrides(subtestOverrides);
 
-    for (let sId = 1; sId <= 8; sId++) {
-      const subQs = questions.filter((q) => q.subtestId === sId);
-      const targetCount = counts[sId] || 18;
-      selected.push(...subQs.slice(0, targetCount));
-    }
+    // Select questions from all 8 subtests with official counts, strictly matching complexity level
+    const selected = sampleUniqueExamQuestions(
+      questions,
+      {
+        1: 24,
+        2: 24,
+        3: 24,
+        4: 24,
+        5: 18,
+        6: 18,
+        7: 18,
+        8: 18,
+      },
+      complexityLevel,
+      subtestOverrides
+    );
+
+    const levelTag =
+      linkingModeSummary ||
+      (complexityLevel !== 'Mixed' ? `${complexityLevel} Level` : 'Balanced Multi-Tier');
 
     // Set official GL policy with strict section locking
     setPolicy((prev) => ({
       ...prev,
-      name: 'GL Assessment Official Full-Length (168 Items, Strict Timing)',
+      name: `GL Assessment Full-Length (168 Items — ${levelTag})`,
       timerType: 'subtest',
       strictSectionLocking: true,
       subtestMinutes: { 1: 10, 2: 10, 3: 8, 4: 8, 5: 10, 6: 8, 7: 9, 8: 9, 9: 10 },
@@ -194,30 +213,50 @@ export default function App() {
     }));
 
     setLastSelectedSubtests([1, 2, 3, 4, 5, 6, 7, 8]);
-    setActiveExamTitle('Official Full-Length CAT4 Level C/D Exam (168 Questions)');
+    setActiveExamTitle(`Official CAT4 Full Exam (168 Qs • ${levelTag})`);
     setActiveExamQuestions(selected);
     setCurrentView('exam');
   };
 
-  const handleStartExam = (subtestIds?: number[], customTitle?: string) => {
+  const handleStartExam = (
+    subtestIds?: number[],
+    customTitle?: string,
+    complexityLevel: ComplexityLevel | 'Mixed' = 'Mixed',
+    subtestOverrides?: Record<number, ComplexityLevel | 'Inherit'>
+  ) => {
     setLastSelectedSubtests(subtestIds);
+    setLastComplexityLevel(complexityLevel);
+    setLastSubtestOverrides(subtestOverrides);
+
     let selected: Question[] = [];
     if (subtestIds && subtestIds.length > 0) {
-      selected = questions.filter((q) => subtestIds.includes(q.subtestId));
+      selected = sampleUniqueQuestionsForSubtests(
+        questions,
+        subtestIds,
+        undefined,
+        complexityLevel,
+        subtestOverrides
+      );
     } else {
-      selected = [...questions];
+      selected = sampleUniqueExamQuestions(
+        questions,
+        undefined,
+        complexityLevel,
+        subtestOverrides
+      );
     }
 
     if (selected.length === 0) {
-      alert('No questions found for the selected subtests. Starting with all available questions.');
-      selected = [...questions];
+      selected = sampleUniqueExamQuestions(questions, undefined, complexityLevel, subtestOverrides);
     }
 
     if (policy.questionOrder === 'randomized') {
       selected = [...selected].sort(() => Math.random() - 0.5);
     }
 
-    setActiveExamTitle(customTitle || 'CAT4 Subtest Diagnostic');
+    const levelSuffix =
+      complexityLevel && complexityLevel !== 'Mixed' ? ` [${complexityLevel} Tier]` : '';
+    setActiveExamTitle(`${customTitle || 'CAT4 Subtest Diagnostic'}${levelSuffix}`);
     setActiveExamQuestions(selected);
     setCurrentView('exam');
   };
@@ -226,18 +265,20 @@ export default function App() {
     selectedQuestions: Question[],
     customTitle: string,
     customMinutes: number,
-    isRandomized: boolean
+    isRandomized: boolean,
+    complexityLabel?: string
   ) => {
+    const fullTitle = complexityLabel ? `${customTitle} (${complexityLabel})` : customTitle;
     setPolicy((prev) => ({
       ...prev,
-      name: `Custom: ${customTitle}`,
+      name: `Custom: ${fullTitle}`,
       timerType: 'total',
       totalMinutes: customMinutes,
       questionOrder: isRandomized ? 'randomized' : 'sequential',
     }));
 
     setLastSelectedSubtests(undefined);
-    setActiveExamTitle(customTitle);
+    setActiveExamTitle(fullTitle);
     setActiveExamQuestions(selectedQuestions);
     setCurrentView('exam');
   };
@@ -304,9 +345,14 @@ export default function App() {
 
   const handleRetakeExam = () => {
     if (lastSelectedSubtests && lastSelectedSubtests.length === 8) {
-      handleStartFull168Exam();
+      handleStartFull168Exam(lastComplexityLevel, lastSubtestOverrides);
     } else {
-      handleStartExam(lastSelectedSubtests, activeExamTitle);
+      handleStartExam(
+        lastSelectedSubtests,
+        activeExamTitle,
+        lastComplexityLevel,
+        lastSubtestOverrides
+      );
     }
   };
 
@@ -350,6 +396,7 @@ export default function App() {
             onOpenPerformance={() => setIsPerformanceModalOpen(true)}
             onOpenCustomTest={() => setIsCustomTestModalOpen(true)}
             onOpenFlashcards={() => setIsFlashcardModalOpen(true)}
+            onOpenComplexityConfig={() => setIsComplexityModalOpen(true)}
           />
         )}
 
@@ -415,6 +462,15 @@ export default function App() {
         questions={questions}
         isOpen={isFlashcardModalOpen}
         onClose={() => setIsFlashcardModalOpen(false)}
+      />
+
+      <ComplexityLevelModal
+        isOpen={isComplexityModalOpen}
+        onClose={() => setIsComplexityModalOpen(false)}
+        initialGlobalLevel={lastComplexityLevel}
+        onLaunchExamWithComplexity={(globalLvl, overrides, summary) =>
+          handleStartFull168Exam(globalLvl, overrides, summary)
+        }
       />
     </div>
   );

@@ -16,6 +16,62 @@ export interface QuestionOption {
   image?: string;
 }
 
+export type ComplexityLevel = 'Beginner' | 'Standard' | 'Advanced' | 'Expert';
+
+export interface ComplexityMeta {
+  level: ComplexityLevel;
+  label: string;
+  shortLabel: string;
+  intlDescriptor: string; // International assessment standard description
+  colorClass: string;
+  badgeBg: string;
+  badgeBorder: string;
+  badgeText: string;
+}
+
+export const COMPLEXITY_LEVELS_META: Record<ComplexityLevel, ComplexityMeta> = {
+  Beginner: {
+    level: 'Beginner',
+    label: 'Beginner (Foundation / Key Stage 2 Baseline)',
+    shortLabel: 'Beginner',
+    intlDescriptor: 'Fundamental reasoning concepts, single-step rules, and guided patterns.',
+    colorClass: 'emerald',
+    badgeBg: 'bg-emerald-50',
+    badgeBorder: 'border-emerald-200',
+    badgeText: 'text-emerald-700',
+  },
+  Standard: {
+    level: 'Standard',
+    label: 'Standard (Intermediate / Grade 5 Age-Expected)',
+    shortLabel: 'Standard',
+    intlDescriptor: 'Official GL Assessment standard benchmark, two-tier transformations.',
+    colorClass: 'blue',
+    badgeBg: 'bg-blue-50',
+    badgeBorder: 'border-blue-200',
+    badgeText: 'text-blue-700',
+  },
+  Advanced: {
+    level: 'Advanced',
+    label: 'Advanced (Proficient / High Stanine 7-8)',
+    shortLabel: 'Advanced',
+    intlDescriptor: 'Complex multi-variable analogies, interleaved series, spatial reflections.',
+    colorClass: 'amber',
+    badgeBg: 'bg-amber-50',
+    badgeBorder: 'border-amber-200',
+    badgeText: 'text-amber-800',
+  },
+  Expert: {
+    level: 'Expert',
+    label: 'Expert (Mastery / Stanine 9 & STEM Olympiad)',
+    shortLabel: 'Expert',
+    intlDescriptor: 'High-cognitive-load spatial folds, advanced abstract rules, non-linear logic.',
+    colorClass: 'purple',
+    badgeBg: 'bg-purple-50',
+    badgeBorder: 'border-purple-200',
+    badgeText: 'text-purple-700',
+  },
+};
+
 export interface Question {
   id: string;
   subtestId: number; // 1 to 8, or 9 for Science & Math
@@ -28,7 +84,8 @@ export interface Question {
   correctAnswer: OptionLabel;
   explanation: string;
   hint?: string;
-  difficulty?: 'Foundation' | 'Standard' | 'Advanced';
+  difficulty?: ComplexityLevel | 'Foundation';
+  complexityLevel?: ComplexityLevel;
   examType?: ExamCategory; // CAT4, Science, Math, GL
   isCustomUploaded?: boolean;
   topicTag?: string;
@@ -123,4 +180,6 @@ export interface CustomTestConfig {
   totalQuestions: number;
   durationMinutes: number;
   randomize: boolean;
+  globalComplexity?: ComplexityLevel | 'Mixed';
+  subtestComplexity?: Record<number, ComplexityLevel | 'Inherit'>;
 }

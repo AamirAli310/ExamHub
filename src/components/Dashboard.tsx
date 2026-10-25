@@ -1,5 +1,12 @@
-import React from 'react';
-import { ExamPolicy, Question, UserProfile, TestAttempt } from '../types/exam';
+import React, { useState } from 'react';
+import {
+  ExamPolicy,
+  Question,
+  UserProfile,
+  TestAttempt,
+  ComplexityLevel,
+  COMPLEXITY_LEVELS_META,
+} from '../types/exam';
 import { SUBTESTS_META } from '../data/defaultPolicies';
 import {
   Play,
@@ -13,6 +20,7 @@ import {
   BarChart2,
   PlusCircle,
   Zap,
+  Target,
 } from 'lucide-react';
 
 interface DashboardProps {
@@ -20,13 +28,23 @@ interface DashboardProps {
   questions: Question[];
   currentUser: UserProfile;
   attempts: TestAttempt[];
-  onStartFull168Exam: () => void;
-  onStartExam: (subtestIds?: number[], customTitle?: string) => void;
+  onStartFull168Exam: (
+    complexityLevel?: ComplexityLevel | 'Mixed',
+    subtestOverrides?: Record<number, ComplexityLevel | 'Inherit'>,
+    linkingModeSummary?: string
+  ) => void;
+  onStartExam: (
+    subtestIds?: number[],
+    customTitle?: string,
+    complexityLevel?: ComplexityLevel | 'Mixed',
+    subtestOverrides?: Record<number, ComplexityLevel | 'Inherit'>
+  ) => void;
   onOpenPolicy: () => void;
   onOpenQuestionBank: () => void;
   onOpenPerformance: () => void;
   onOpenCustomTest: () => void;
   onOpenFlashcards: () => void;
+  onOpenComplexityConfig?: () => void;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
@@ -41,7 +59,39 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onOpenPerformance,
   onOpenCustomTest,
   onOpenFlashcards,
+  onOpenComplexityConfig,
 }) => {
+  const [selectedExamLevel, setSelectedExamLevel] = useState<ComplexityLevel | 'Mixed'>('Mixed');
+  const [sectionLevels, setSectionLevels] = useState<
+    Record<string, ComplexityLevel | 'Inherit'>
+  >({
+    'Non-Verbal': 'Inherit',
+    'Verbal': 'Inherit',
+    'Quantitative': 'Inherit',
+    'Spatial': 'Inherit',
+  });
+  const [subtestLevels, setSubtestLevels] = useState<
+    Record<number, ComplexityLevel | 'Inherit'>
+  >({});
+
+  const resolveBatteryLevel = (
+    batteryKey: string
+  ): ComplexityLevel | 'Mixed' => {
+    const override = sectionLevels[batteryKey];
+    if (override && override !== 'Inherit') return override;
+    return selectedExamLevel;
+  };
+
+  const resolveSubtestLevel = (subId: number): ComplexityLevel | 'Mixed' => {
+    const subOverride = subtestLevels[subId];
+    if (subOverride && subOverride !== 'Inherit') return subOverride;
+    const subMeta = SUBTESTS_META.find((s) => s.id === subId);
+    if (subMeta && sectionLevels[subMeta.battery] && sectionLevels[subMeta.battery] !== 'Inherit') {
+      return sectionLevels[subMeta.battery] as ComplexityLevel;
+    }
+    return selectedExamLevel;
+  };
+
   const userAttempts = attempts.filter((a) => a.userId === currentUser.id);
   const latestAttempt = userAttempts[userAttempts.length - 1];
 
@@ -116,18 +166,75 @@ export const Dashboard: React.FC<DashboardProps> = ({
               Official GL Assessment exam specifications across all 8 subtests with dedicated timers (10m, 10m, 8m, 8m, 10m, 8m, 9m, 9m), strict automatic section-locking, within-section question grids, and in-depth Stanine / SAS analytics.
             </p>
 
-            <div className="mt-8 flex flex-wrap items-center gap-3">
+            {/* Level of Complexity Selector */}
+            <div className="mt-5 p-4 bg-slate-800/80 rounded-2xl border border-slate-700 max-w-2xl backdrop-blur-xs space-y-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[11px] font-extrabold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Target className="w-3.5 h-3.5" />
+                  <span>Main Module Complexity Level:</span>
+                </span>
+                {onOpenComplexityConfig && (
+                  <button
+                    type="button"
+                    onClick={onOpenComplexityConfig}
+                    className="text-[11px] font-bold text-teal-300 hover:text-teal-200 underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <Sliders className="w-3 h-3" />
+                    <span>Link by Section / Subsection</span>
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setSelectedExamLevel('Mixed')}
+                  className={`py-1.5 px-2 rounded-xl transition-all cursor-pointer ${
+                    selectedExamLevel === 'Mixed'
+                      ? 'bg-amber-400 text-slate-950 font-black shadow-sm'
+                      : 'bg-slate-700/60 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  Mixed (Balanced)
+                </button>
+                {(['Beginner', 'Standard', 'Advanced', 'Expert'] as ComplexityLevel[]).map(
+                  (lvl) => (
+                    <button
+                      key={lvl}
+                      type="button"
+                      onClick={() => setSelectedExamLevel(lvl)}
+                      className={`py-1.5 px-2 rounded-xl transition-all cursor-pointer ${
+                        selectedExamLevel === lvl
+                          ? 'bg-teal-400 text-slate-950 font-black shadow-sm'
+                          : 'bg-slate-700/60 text-slate-300 hover:bg-slate-700'
+                      }`}
+                    >
+                      {COMPLEXITY_LEVELS_META[lvl].shortLabel}
+                    </button>
+                  )
+                )}
+              </div>
+              <div className="text-[11px] text-slate-300">
+                {selectedExamLevel === 'Mixed'
+                  ? 'Stratified distribution across Beginner, Standard, Advanced & Expert tiers.'
+                  : `${COMPLEXITY_LEVELS_META[selectedExamLevel].label} — ${COMPLEXITY_LEVELS_META[selectedExamLevel].intlDescriptor}`}
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-wrap items-center gap-3">
               <button
-                onClick={onStartFull168Exam}
-                className="px-8 py-3.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-2xl shadow-lg transition-transform hover:scale-105 flex items-center gap-2.5 text-sm"
+                onClick={() => onStartFull168Exam(selectedExamLevel)}
+                className="px-8 py-3.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-2xl shadow-lg transition-transform hover:scale-105 flex items-center gap-2.5 text-sm cursor-pointer"
               >
                 <Play className="w-5 h-5 fill-slate-950" />
-                <span>Start Full 168-Question Exam</span>
+                <span>
+                  Start 168-Exam{' '}
+                  {selectedExamLevel !== 'Mixed' ? `(${selectedExamLevel})` : ''}
+                </span>
               </button>
 
               <button
                 onClick={onOpenFlashcards}
-                className="px-5 py-3.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-extrabold rounded-2xl border border-amber-500/40 transition-colors flex items-center gap-2 text-sm shadow-md"
+                className="px-5 py-3.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-extrabold rounded-2xl border border-amber-500/40 transition-colors flex items-center gap-2 text-sm shadow-md cursor-pointer"
               >
                 <Zap className="w-4 h-4 fill-amber-400 text-amber-400" />
                 <span>Quick Review Flashcards</span>
@@ -135,7 +242,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
               <button
                 onClick={onOpenCustomTest}
-                className="px-5 py-3.5 bg-[#0F766E] hover:bg-teal-700 text-white font-bold rounded-2xl border border-teal-500/40 transition-colors flex items-center gap-2 text-sm shadow-md"
+                className="px-5 py-3.5 bg-[#0F766E] hover:bg-teal-700 text-white font-bold rounded-2xl border border-teal-500/40 transition-colors flex items-center gap-2 text-sm shadow-md cursor-pointer"
               >
                 <PlusCircle className="w-4 h-4" />
                 <span>Create Custom Test</span>
@@ -143,7 +250,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
               <button
                 onClick={onOpenPolicy}
-                className="px-5 py-3.5 bg-slate-800/90 hover:bg-slate-700 text-white font-bold rounded-2xl border border-slate-700 transition-colors flex items-center gap-2 text-sm shadow-md"
+                className="px-5 py-3.5 bg-slate-800/90 hover:bg-slate-700 text-white font-bold rounded-2xl border border-slate-700 transition-colors flex items-center gap-2 text-sm shadow-md cursor-pointer"
               >
                 <Sliders className="w-4 h-4 text-amber-400" />
                 <span>Policy</span>
@@ -151,7 +258,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
               <button
                 onClick={onOpenQuestionBank}
-                className="px-5 py-3.5 bg-slate-800/90 hover:bg-slate-700 text-white font-bold rounded-2xl border border-slate-700 transition-colors flex items-center gap-2 text-sm shadow-md"
+                className="px-5 py-3.5 bg-slate-800/90 hover:bg-slate-700 text-white font-bold rounded-2xl border border-slate-700 transition-colors flex items-center gap-2 text-sm shadow-md cursor-pointer"
               >
                 <Database className="w-4 h-4 text-teal-400" />
                 <span>Bank ({questions.length})</span>
@@ -160,15 +267,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
         </div>
 
-        {/* THE 4 CORE BATTERIES VISUAL CARDS */}
+        {/* THE 4 CORE BATTERIES VISUAL CARDS (WITH SECTION-LEVEL COMPLEXITY LINKING) */}
         <div>
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
             <div>
               <h3 className="text-xl font-extrabold text-slate-900">
-                The 4 Cognitive Batteries (GL Assessment Official Format)
+                The 4 Cognitive Batteries (Section-Level Practice)
               </h3>
               <p className="text-xs text-slate-500">
-                8 subtests distributed across 3 official testing parts
+                Each section inherits the Main Module Level ({selectedExamLevel}) or can be overridden independently
               </p>
             </div>
             <a
@@ -188,11 +295,22 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   <span className="text-xs font-black uppercase tracking-wider text-pink-600 bg-pink-50 px-2.5 py-1 rounded-md">
                     Part One &bull; 48 Qs
                   </span>
-                  <div className="w-12 h-12 rounded-xl bg-pink-50 flex items-center justify-center text-pink-600">
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M19.439 7.85c0-1.57.802-2.85 2.14-2.85v-2a1 1 0 0 0-1-1h-2a2.85 2.85 0 0 0-2.85 2.14v0a2.85 2.85 0 0 1-5.46 0v0A2.85 2.85 0 0 0 7.42 2h-2a1 1 0 0 0-1 1v2c1.34 0 2.14 1.28 2.14 2.85s-.8 2.85-2.14 2.85v2a1 1 0 0 0 1 1h2a2.85 2.85 0 0 0 2.85-2.14v0a2.85 2.85 0 0 1 5.46 0v0A2.85 2.85 0 0 0 16.58 14h2a1 1 0 0 0 1-1v-2c-1.34 0-2.14-1.28-2.14-2.85z"/>
-                    </svg>
-                  </div>
+                  <select
+                    value={sectionLevels['Non-Verbal'] || 'Inherit'}
+                    onChange={(e) =>
+                      setSectionLevels((prev) => ({
+                        ...prev,
+                        'Non-Verbal': e.target.value as ComplexityLevel | 'Inherit',
+                      }))
+                    }
+                    className="text-[10px] font-bold bg-pink-50/70 border border-pink-200 text-pink-800 rounded-lg px-2 py-1"
+                  >
+                    <option value="Inherit">Inherit ({selectedExamLevel})</option>
+                    <option value="Beginner">Beginner</option>
+                    <option value="Standard">Standard</option>
+                    <option value="Advanced">Advanced</option>
+                    <option value="Expert">Expert</option>
+                  </select>
                 </div>
 
                 <div className="text-2xl font-black text-pink-600 mb-1">Subtests 1 & 2</div>
@@ -203,10 +321,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
               </div>
 
               <button
-                onClick={() => onStartExam([1, 2], 'Part 1: Non-Verbal Reasoning')}
-                className="mt-6 w-full py-2.5 rounded-xl bg-pink-50 hover:bg-pink-100 text-pink-700 font-bold text-xs transition-colors"
+                onClick={() =>
+                  onStartExam(
+                    [1, 2],
+                    'Part 1: Non-Verbal Reasoning',
+                    resolveBatteryLevel('Non-Verbal')
+                  )
+                }
+                className="mt-6 w-full py-2.5 rounded-xl bg-pink-50 hover:bg-pink-100 text-pink-700 font-bold text-xs transition-colors cursor-pointer"
               >
-                Practice Part 1 (48 Questions | 20m)
+                Practice Non-Verbal ({resolveBatteryLevel('Non-Verbal')})
               </button>
             </div>
 
@@ -217,14 +341,22 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   <span className="text-xs font-black uppercase tracking-wider text-amber-600 bg-amber-50 px-2.5 py-1 rounded-md">
                     Part Two &bull; 48 Qs
                   </span>
-                  <div className="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600">
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="2" y="3" width="9" height="9" rx="1.5"/>
-                      <rect x="13" y="3" width="9" height="9" rx="1.5"/>
-                      <rect x="7.5" y="12" width="9" height="9" rx="1.5"/>
-                      <path d="M5.5 8.5 L6.5 5.5 L7.5 8.5 M5.8 7.5 L7.2 7.5"/>
-                    </svg>
-                  </div>
+                  <select
+                    value={sectionLevels['Verbal'] || 'Inherit'}
+                    onChange={(e) =>
+                      setSectionLevels((prev) => ({
+                        ...prev,
+                        Verbal: e.target.value as ComplexityLevel | 'Inherit',
+                      }))
+                    }
+                    className="text-[10px] font-bold bg-amber-50/70 border border-amber-200 text-amber-900 rounded-lg px-2 py-1"
+                  >
+                    <option value="Inherit">Inherit ({selectedExamLevel})</option>
+                    <option value="Beginner">Beginner</option>
+                    <option value="Standard">Standard</option>
+                    <option value="Advanced">Advanced</option>
+                    <option value="Expert">Expert</option>
+                  </select>
                 </div>
 
                 <div className="text-2xl font-black text-amber-600 mb-1">Subtests 3 & 4</div>
@@ -235,10 +367,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
               </div>
 
               <button
-                onClick={() => onStartExam([3, 4], 'Part 2: Verbal Reasoning')}
-                className="mt-6 w-full py-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-xs transition-colors"
+                onClick={() =>
+                  onStartExam(
+                    [3, 4],
+                    'Part 2: Verbal Reasoning',
+                    resolveBatteryLevel('Verbal')
+                  )
+                }
+                className="mt-6 w-full py-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-xs transition-colors cursor-pointer"
               >
-                Practice Verbal (48 Questions | 16m)
+                Practice Verbal ({resolveBatteryLevel('Verbal')})
               </button>
             </div>
 
@@ -249,17 +387,22 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   <span className="text-xs font-black uppercase tracking-wider text-yellow-700 bg-yellow-50 px-2.5 py-1 rounded-md">
                     Part Two &bull; 36 Qs
                   </span>
-                  <div className="w-12 h-12 rounded-xl bg-yellow-50 flex items-center justify-center text-yellow-700">
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="3" y="3" width="18" height="18" rx="2"/>
-                      <line x1="3" y1="8" x2="21" y2="8"/>
-                      <line x1="3" y1="13" x2="21" y2="13"/>
-                      <line x1="3" y1="18" x2="21" y2="18"/>
-                      <circle cx="8" cy="8" r="1.5" fill="currentColor"/>
-                      <circle cx="15" cy="13" r="1.5" fill="currentColor"/>
-                      <circle cx="11" cy="18" r="1.5" fill="currentColor"/>
-                    </svg>
-                  </div>
+                  <select
+                    value={sectionLevels['Quantitative'] || 'Inherit'}
+                    onChange={(e) =>
+                      setSectionLevels((prev) => ({
+                        ...prev,
+                        Quantitative: e.target.value as ComplexityLevel | 'Inherit',
+                      }))
+                    }
+                    className="text-[10px] font-bold bg-yellow-50/70 border border-yellow-200 text-yellow-900 rounded-lg px-2 py-1"
+                  >
+                    <option value="Inherit">Inherit ({selectedExamLevel})</option>
+                    <option value="Beginner">Beginner</option>
+                    <option value="Standard">Standard</option>
+                    <option value="Advanced">Advanced</option>
+                    <option value="Expert">Expert</option>
+                  </select>
                 </div>
 
                 <div className="text-2xl font-black text-yellow-600 mb-1">Subtests 5 & 6</div>
@@ -270,10 +413,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
               </div>
 
               <button
-                onClick={() => onStartExam([5, 6], 'Part 2: Quantitative Reasoning')}
-                className="mt-6 w-full py-2.5 rounded-xl bg-yellow-50 hover:bg-yellow-100 text-yellow-800 font-bold text-xs transition-colors"
+                onClick={() =>
+                  onStartExam(
+                    [5, 6],
+                    'Part 2: Quantitative Reasoning',
+                    resolveBatteryLevel('Quantitative')
+                  )
+                }
+                className="mt-6 w-full py-2.5 rounded-xl bg-yellow-50 hover:bg-yellow-100 text-yellow-800 font-bold text-xs transition-colors cursor-pointer"
               >
-                Practice Quantitative (36 Qs | 18m)
+                Practice Quantitative ({resolveBatteryLevel('Quantitative')})
               </button>
             </div>
 
@@ -284,12 +433,22 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   <span className="text-xs font-black uppercase tracking-wider text-cyan-600 bg-cyan-50 px-2.5 py-1 rounded-md">
                     Part Three &bull; 36 Qs
                   </span>
-                  <div className="w-12 h-12 rounded-xl bg-cyan-50 flex items-center justify-center text-cyan-600">
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 2 L2 12 L12 22 L22 12 Z"/>
-                      <path d="M12 2 L12 22"/>
-                    </svg>
-                  </div>
+                  <select
+                    value={sectionLevels['Spatial'] || 'Inherit'}
+                    onChange={(e) =>
+                      setSectionLevels((prev) => ({
+                        ...prev,
+                        Spatial: e.target.value as ComplexityLevel | 'Inherit',
+                      }))
+                    }
+                    className="text-[10px] font-bold bg-cyan-50/70 border border-cyan-200 text-cyan-900 rounded-lg px-2 py-1"
+                  >
+                    <option value="Inherit">Inherit ({selectedExamLevel})</option>
+                    <option value="Beginner">Beginner</option>
+                    <option value="Standard">Standard</option>
+                    <option value="Advanced">Advanced</option>
+                    <option value="Expert">Expert</option>
+                  </select>
                 </div>
 
                 <div className="text-2xl font-black text-cyan-600 mb-1">Subtests 7 & 8</div>
@@ -300,12 +459,87 @@ export const Dashboard: React.FC<DashboardProps> = ({
               </div>
 
               <button
-                onClick={() => onStartExam([7, 8], 'Part 3: Spatial Reasoning')}
-                className="mt-6 w-full py-2.5 rounded-xl bg-cyan-50 hover:bg-cyan-100 text-cyan-800 font-bold text-xs transition-colors"
+                onClick={() =>
+                  onStartExam(
+                    [7, 8],
+                    'Part 3: Spatial Reasoning',
+                    resolveBatteryLevel('Spatial')
+                  )
+                }
+                className="mt-6 w-full py-2.5 rounded-xl bg-cyan-50 hover:bg-cyan-100 text-cyan-800 font-bold text-xs transition-colors cursor-pointer"
               >
-                Practice Spatial (36 Qs | 18m)
+                Practice Spatial ({resolveBatteryLevel('Spatial')})
               </button>
             </div>
+          </div>
+        </div>
+
+        {/* 8 INDIVIDUAL SUBSECTIONS (SUBTEST-LEVEL COMPLEXITY PRACTICE) */}
+        <div>
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+            <div>
+              <h3 className="text-xl font-extrabold text-slate-900">
+                Individual Subsections (Targeted Subtest Practice)
+              </h3>
+              <p className="text-xs text-slate-500">
+                100 unique questions per subsection (25 Beginner, 25 Standard, 25 Advanced, 25 Expert)
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {SUBTESTS_META.filter((s) => s.id <= 8).map((sub) => {
+              const effectiveLevel = resolveSubtestLevel(sub.id);
+              const subBankCount = questions.filter((q) => q.subtestId === sub.id).length;
+
+              return (
+                <div
+                  key={sub.id}
+                  className="bg-white rounded-2xl p-4 border border-slate-200 shadow-2xs hover:border-teal-500 transition-all flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-1 mb-2">
+                      <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-slate-100 text-slate-700">
+                        Subtest {sub.id} &bull; {sub.defaultMinutes}m
+                      </span>
+                      <select
+                        value={subtestLevels[sub.id] || 'Inherit'}
+                        onChange={(e) =>
+                          setSubtestLevels((prev) => ({
+                            ...prev,
+                            [sub.id]: e.target.value as ComplexityLevel | 'Inherit',
+                          }))
+                        }
+                        className="text-[10px] font-bold bg-slate-50 border border-slate-300 rounded-lg px-1.5 py-0.5 text-slate-800"
+                      >
+                        <option value="Inherit">Inherit ({effectiveLevel})</option>
+                        <option value="Beginner">Beginner</option>
+                        <option value="Standard">Standard</option>
+                        <option value="Advanced">Advanced</option>
+                        <option value="Expert">Expert</option>
+                      </select>
+                    </div>
+                    <h4 className="font-extrabold text-slate-900 text-sm">{sub.name}</h4>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      {sub.battery} &bull; {sub.officialQuestionCount} Exam Qs ({subBankCount} in Bank)
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() =>
+                      onStartExam(
+                        [sub.id],
+                        `Subtest ${sub.id}: ${sub.name}`,
+                        effectiveLevel
+                      )
+                    }
+                    className="mt-4 w-full py-2 rounded-xl bg-slate-900 hover:bg-teal-700 text-white font-bold text-xs transition-colors cursor-pointer"
+                  >
+                    Start {sub.name} ({effectiveLevel})
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -332,7 +566,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               </div>
 
               <div className="mt-6 flex items-center justify-between pt-2 border-t border-amber-200">
-                <span className="text-xs text-amber-800 font-bold">188 Cards in Bank</span>
+                <span className="text-xs text-amber-800 font-bold">{questions.length} Cards in Bank</span>
                 <button
                   onClick={onOpenFlashcards}
                   className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs transition-transform shadow-sm hover:scale-105 flex items-center gap-1.5"
@@ -360,7 +594,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               <div className="mt-6 flex items-center justify-between">
                 <span className="text-xs text-slate-400 font-medium">10 Questions &bull; 10 Mins</span>
                 <button
-                  onClick={() => onStartExam([9], 'Science & Applied Math Reasoning')}
+                  onClick={() => onStartExam([9], 'Science & Applied Math Reasoning', selectedExamLevel)}
                   className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-colors shadow-xs"
                 >
                   Start Science Test

@@ -351,12 +351,27 @@ export const ExamWorkspace: React.FC<ExamWorkspaceProps> = ({
             <div>
               {/* Question metadata badge & flag */}
               <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center flex-wrap gap-2">
                   <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
                     Item #{currentQIndex + 1}
                   </span>
+                  {activeQuestion?.complexityLevel && (
+                    <span
+                      className={`text-[10px] font-black px-2 py-0.5 rounded border uppercase tracking-wide ${
+                        activeQuestion.complexityLevel === 'Beginner'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : activeQuestion.complexityLevel === 'Standard'
+                          ? 'bg-blue-50 text-blue-700 border-blue-200'
+                          : activeQuestion.complexityLevel === 'Advanced'
+                          ? 'bg-amber-50 text-amber-800 border-amber-200'
+                          : 'bg-purple-50 text-purple-700 border-purple-200'
+                      }`}
+                    >
+                      {activeQuestion.complexityLevel} Tier
+                    </span>
+                  )}
                   {activeQuestion?.examType && (
-                    <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700">
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700">
                       {activeQuestion.examType}
                     </span>
                   )}
